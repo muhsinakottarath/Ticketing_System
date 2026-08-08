@@ -103,14 +103,19 @@ async function updateTicketStatus(ticketId, status) {
 
 async function loadTicketDetail(ticketId) {
     try {
-        const response = await fetch(`/api/tickets/${ticketId}`);
-        if (!response.ok) {
-            throw new Error(`Failed to load ticket: ${response.statusText}`);
+        const ticket = tickets.find(t => t.id === ticketId);
+        if (!ticket) {
+            throw new Error('Ticket not found');
         }
         
-        const ticketWithMessages = await response.json();
+        const response = await fetch(`/api/tickets/${ticketId}/messages`);
+        if (!response.ok) {
+            throw new Error(`Failed to load messages: ${response.statusText}`);
+        }
+        
+        const messages = await response.json();
         selectedTicketId = ticketId;
-        renderTicketDetail(ticketWithMessages, ticketWithMessages.messages || []);
+        renderTicketDetail(ticket, messages);
     } catch (error) {
         showError('Failed to load ticket details. Please try again.');
         console.error('Error loading ticket detail:', error);
@@ -124,7 +129,7 @@ async function addMessage(ticketId, messageText, author) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ description: messageText, author })
+            body: JSON.stringify({ message_text: messageText, author })
         });
         
         if (!response.ok) {
@@ -235,7 +240,7 @@ function createTicketCard(ticket) {
     const priorityIcon = getPriorityIcon(ticket.priority);
     
     return `
-        <div class="ticket-card ${selectedTicketId === ticket.ticket_id ? 'active' : ''}" data-ticket-id="${ticket.ticket_id}">
+        <div class="ticket-card ${selectedTicketId === ticket.id ? 'active' : ''}" data-ticket-id="${ticket.id}">
             <div class="ticket-card-header">
                 <h3>${escapeHtml(ticket.title)}</h3>
                 <span class="status-badge ${statusClass}">${formatStatus(ticket.status)}</span>

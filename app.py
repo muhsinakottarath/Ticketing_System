@@ -1,210 +1,249 @@
+"""
+Lakebase-Powered AI Support App
+--------------------------------
+Flask app backed by a Lakebase (Databricks-managed Postgres) instance.
+
+Environment variables expected (wired up as Databricks App secrets/resources,
+exactly like DATABASE_URL was wired for the watchlist app in the workshop):
+
+    DATABASE_URL   -- full Postgres connection string for your Lakebase instance
+
+Never hard-code credentials here. In Databricks Apps, add DATABASE_URL as a
+secret resource on the app (Edit -> Add resource -> Secret), matching the name
+used below.
+"""
+
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
-from flask import Flask, jsonify, request, render_template
+import psycopg2.extras
+from flask import Flask, request, jsonify, render_template
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Database connection
-def get_db_connection():
-    database_url = os.environ.get('DATABASE_URL')
-    if not database_url:
-        raise ValueError("DATABASE_URL environment variable is not set")
-    conn = psycopg2.connect(database_url, cursor_factory=RealDictCursor)
-    return conn
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Initialize database tables
-def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Read and execute schema
-    with open('schema.sql', 'r') as f:
-        cur.execute(f.read())
-    
-    # Check if tables are empty, if so, seed data
-    cur.execute("SELECT COUNT(*) as count FROM tickets")
-    if cur.fetchone()['count'] == 0:
-        with open('seed_data.sql', 'r') as f:
-            cur.execute(f.read())
-    
-    conn.commit()
-    cur.close()
-    conn.close()
+VALID_STATUSES = {"open", "in_progress", "resolved"}
+VALID_PRIORITIES = {"low", "medium", "high"}
 
-@app.route('/')
+
+def get_conn():
+    if not DATABASE_URL:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Add it as a secret resource on the Databricks App."
+        )
+    return psycopg2.connect(DATABASE_URL)
+
+
+def ensure_schema():
+    """Create tables if they don't exist yet, and seed sample data once."""
+    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+    seed_path = os.path.join(os.path.dirname(__file__), "seed_data.sql")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            with open(schema_path) as f:
+                cur.execute(f.read())
+            with open(seed_path) as f:
+                cur.execute(f.read())
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Page
+# ---------------------------------------------------------------------------
+
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
-@app.route('/api/tickets', methods=['GET'])
-def get_tickets():
-    """Get all tickets with optional filtering"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Get query parameters
-    status = request.args.get('status', 'all')
-    priority = request.args.get('priority', 'all')
-    sort_order = request.args.get('sort', 'newest')
-    
-    # Build query
-    query = "SELECT * FROM tickets WHERE 1=1"
+
+# ---------------------------------------------------------------------------
+# Tickets API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/tickets", methods=["GET"])
+def list_tickets():
+    """List tickets, optionally filtered by status (bonus: filtering)."""
+    status_filter = request.args.get("status")
+
+    query = """
+        SELECT t.ticket_id, t.title, t.status, t.priority, t.category,
+               t.created_by, t.created_at,
+               COUNT(m.message_id) AS message_count
+        FROM tickets t
+        LEFT JOIN ticket_messages m ON m.ticket_id = t.ticket_id
+    """
     params = []
-    
-    if status != 'all':
-        query += " AND status = %s"
-        params.append(status)
-    
-    if priority != 'all':
-        query += " AND priority = %s"
-        params.append(priority)
-    
-    # Sort order
-    if sort_order == 'newest':
-        query += " ORDER BY created_at DESC"
-    else:
-        query += " ORDER BY created_at ASC"
-    
-    cur.execute(query, params)
-    tickets = cur.fetchall()
-    
-    # Convert datetime to ISO format
-    for ticket in tickets:
-        ticket['created_at'] = ticket['created_at'].isoformat()
-    
-    cur.close()
-    conn.close()
-    
-    return jsonify(tickets)
+    if status_filter:
+        if status_filter not in VALID_STATUSES:
+            return jsonify({"error": f"Invalid status filter '{status_filter}'"}), 400
+        query += " WHERE t.status = %s"
+        params.append(status_filter)
 
-@app.route('/api/tickets', methods=['POST'])
+    query += " GROUP BY t.ticket_id ORDER BY t.created_at DESC"
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, params)
+            rows = cur.fetchall()
+
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tickets", methods=["POST"])
 def create_ticket():
-    """Create a new ticket"""
-    data = request.get_json()
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute(
-        """INSERT INTO tickets (title, status, priority, category, created_by, created_at)
-           VALUES (%s, %s, %s, %s, %s, %s)
-           RETURNING ticket_id, title, status, priority, category, created_by, created_at""",
-        (data['title'], 'open', data.get('priority', 'medium'), 
-         data.get('category'), data['created_by'], datetime.now())
-    )
-    
-    new_ticket = cur.fetchone()
-    new_ticket['created_at'] = new_ticket['created_at'].isoformat()
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify(new_ticket), 201
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    created_by = (data.get("created_by") or "").strip()
+    priority = data.get("priority", "medium")
+    category = data.get("category") or None
 
-@app.route('/api/tickets/<int:ticket_id>', methods=['GET'])
-def get_ticket_detail(ticket_id):
-    """Get ticket details with messages"""
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Get ticket
-    cur.execute("SELECT * FROM tickets WHERE ticket_id = %s", (ticket_id,))
-    ticket = cur.fetchone()
-    
-    if not ticket:
-        cur.close()
-        conn.close()
-        return jsonify({'error': 'Ticket not found'}), 404
-    
-    ticket['created_at'] = ticket['created_at'].isoformat()
-    
-    # Get messages
-    cur.execute(
-        """SELECT * FROM ticket_messages 
-           WHERE ticket_id = %s 
-           ORDER BY created_at ASC""",
-        (ticket_id,)
-    )
-    messages = cur.fetchall()
-    
-    for message in messages:
-        message['created_at'] = message['created_at'].isoformat()
-    
-    ticket['messages'] = messages
-    
-    cur.close()
-    conn.close()
-    
-    return jsonify(ticket)
+    # Input validation (bonus: validation + helpful error messages)
+    errors = []
+    if not title:
+        errors.append("title is required")
+    if not created_by:
+        errors.append("created_by is required")
+    if priority not in VALID_PRIORITIES:
+        errors.append(f"priority must be one of {sorted(VALID_PRIORITIES)}")
+    if errors:
+        return jsonify({"error": "; ".join(errors)}), 400
 
-@app.route('/api/tickets/<int:ticket_id>/messages', methods=['POST'])
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO tickets (title, status, priority, category, created_by)
+                VALUES (%s, 'open', %s, %s, %s)
+                RETURNING ticket_id, title, status, priority, category, created_by, created_at
+                """,
+                (title, priority, category, created_by),
+            )
+            new_ticket = cur.fetchone()
+        conn.commit()
+
+    return jsonify(dict(new_ticket)), 201
+
+
+@app.route("/api/tickets/<int:ticket_id>/status", methods=["PATCH"])
+def update_status(ticket_id):
+    data = request.get_json(silent=True) or {}
+    new_status = data.get("status")
+
+    if new_status not in VALID_STATUSES:
+        return jsonify({"error": f"status must be one of {sorted(VALID_STATUSES)}"}), 400
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE tickets SET status = %s WHERE ticket_id = %s",
+                (new_status, ticket_id),
+            )
+            if cur.rowcount == 0:
+                return jsonify({"error": "ticket not found"}), 404
+        conn.commit()
+
+    return jsonify({"ticket_id": ticket_id, "status": new_status})
+
+
+@app.route("/api/tickets/<int:ticket_id>", methods=["DELETE"])
+def delete_ticket(ticket_id):
+    """Bonus: delete functionality (confirmation is handled client-side)."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM tickets WHERE ticket_id = %s", (ticket_id,))
+            if cur.rowcount == 0:
+                return jsonify({"error": "ticket not found"}), 404
+        conn.commit()
+
+    return jsonify({"deleted": ticket_id})
+
+
+# ---------------------------------------------------------------------------
+# Messages API
+# ---------------------------------------------------------------------------
+
+@app.route("/api/tickets/<int:ticket_id>/messages", methods=["GET"])
+def list_messages(ticket_id):
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT message_id, ticket_id, message_text, author, created_at
+                FROM ticket_messages
+                WHERE ticket_id = %s
+                ORDER BY created_at ASC
+                """,
+                (ticket_id,),
+            )
+            rows = cur.fetchall()
+
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tickets/<int:ticket_id>/messages", methods=["POST"])
 def add_message(ticket_id):
-    """Add a message to a ticket"""
-    data = request.get_json()
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute(
-        """INSERT INTO ticket_messages (ticket_id, description, author, created_at)
-           VALUES (%s, %s, %s, %s)
-           RETURNING message_id, ticket_id, description, author, created_at""",
-        (ticket_id, data['description'], data['author'], datetime.now())
-    )
-    
-    new_message = cur.fetchone()
-    new_message['created_at'] = new_message['created_at'].isoformat()
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify(new_message), 201
+    data = request.get_json(silent=True) or {}
+    message_text = (data.get("message_text") or "").strip()
+    author = (data.get("author") or "").strip()
 
-@app.route('/api/tickets/<int:ticket_id>/status', methods=['PATCH'])
-def update_ticket_status(ticket_id):
-    """Update ticket status"""
-    data = request.get_json()
-    new_status = data.get('status')
-    
-    if new_status not in ['open', 'in_progress', 'resolved']:
-        return jsonify({'error': 'Invalid status'}), 400
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute(
-        """UPDATE tickets SET status = %s 
-           WHERE ticket_id = %s 
-           RETURNING ticket_id, title, status, priority, category, created_by, created_at""",
-        (new_status, ticket_id)
-    )
-    
-    updated_ticket = cur.fetchone()
-    
-    if not updated_ticket:
-        cur.close()
-        conn.close()
-        return jsonify({'error': 'Ticket not found'}), 404
-    
-    updated_ticket['created_at'] = updated_ticket['created_at'].isoformat()
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify(updated_ticket)
+    errors = []
+    if not message_text:
+        errors.append("message_text is required")
+    if not author:
+        errors.append("author is required")
+    if errors:
+        return jsonify({"error": "; ".join(errors)}), 400
 
-if __name__ == '__main__':
-    # Initialize database on startup
-    try:
-        init_db()
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Error initializing database: {e}")
-    
-    # Run the app
-    port = int(os.environ.get('PORT', 8000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT 1 FROM tickets WHERE ticket_id = %s", (ticket_id,))
+            if cur.fetchone() is None:
+                return jsonify({"error": "ticket not found"}), 404
+
+            cur.execute(
+                """
+                INSERT INTO ticket_messages (ticket_id, message_text, author)
+                VALUES (%s, %s, %s)
+                RETURNING message_id, ticket_id, message_text, author, created_at
+                """,
+                (ticket_id, message_text, author),
+            )
+            new_message = cur.fetchone()
+        conn.commit()
+
+    return jsonify(dict(new_message)), 201
+
+
+# ---------------------------------------------------------------------------
+# Stats (bonus: display ticket statistics)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/stats", methods=["GET"])
+def stats():
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM tickets
+                GROUP BY status
+                """
+            )
+            by_status = {r["status"]: r["count"] for r in cur.fetchall()}
+
+            cur.execute("SELECT COUNT(*) AS total FROM tickets")
+            total = cur.fetchone()["total"]
+
+    return jsonify({"total": total, "by_status": by_status})
+
+
+if __name__ == "__main__":
+    ensure_schema()
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
+else:
+    # Databricks Apps typically imports the module rather than running __main__,
+    # so make sure the schema/seed step still runs on startup.
+    ensure_schema()
