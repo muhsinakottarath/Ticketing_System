@@ -190,7 +190,7 @@ function applyFiltersAndSort() {
 }
 
 function handleStatusFilter(e) {
-    const status = e.target.dataset.status;
+    const status = e.target.dataset.status || 'all';
     currentFilters.status = status;
     
     // Update active button
