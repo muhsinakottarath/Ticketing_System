@@ -1,0 +1,5 @@
+command: ["python", "app.py"]
+
+env:
+  - name: "DATABASE_URL"
+    valueFrom: "DATABASE_URL"
