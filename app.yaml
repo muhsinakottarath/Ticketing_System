@@ -1,5 +1,11 @@
 command: ["python", "app.py"]
 
+resources:
+  - name: DATABASE_URL
+    secret:
+      scope: support_app_secrets
+      key: DATABASE_URL
+
 env:
-  - name: "DATABASE_URL"
-    valueFrom: "DATABASE_URL"
+  - name: DATABASE_URL
+    valueFrom: ${resources.DATABASE_URL}
