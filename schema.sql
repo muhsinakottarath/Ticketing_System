@@ -1,20 +1,20 @@
 CREATE TABLE IF NOT EXISTS tickets(
     ticket_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    title STRING NOT NULL,
-    status STRING NOT NULL,
-    priority STRING NOT NULL DEFAULT 'medium',
-    category STRING,
-    created_by STRING NOT NULL,
-    created_at TIMESTAMP NOT NULL
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    priority TEXT NOT NULL DEFAULT 'medium',
+    category TEXT,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS messages(
+CREATE TABLE IF NOT EXISTS ticket_messages(
     message_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     ticket_id BIGINT NOT NULL,
-    message_text STRING NOT NULL,
-    author STRING NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id)
+    description TEXT NOT NULL,
+    author TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
 );
 
 

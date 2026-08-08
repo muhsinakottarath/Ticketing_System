@@ -1,16 +1,15 @@
--- Sample tickets
-INSERT INTO tickets (title, status, created_by, created_at)
+-- Sample ticket data
+INSERT INTO tickets (title, status, priority, category, created_by, created_at)
 VALUES 
-    ('Printer not working', 'open', 'alice', CURRENT_TIMESTAMP()),
-    ('Password reset request', 'in_progress', 'bob', CURRENT_TIMESTAMP()),
-    ('Software installation needed', 'resolved', 'carol', CURRENT_TIMESTAMP()),
-    ('Email not syncing', 'open', 'david', CURRENT_TIMESTAMP());
+    ('Printer not working', 'open', 'high', 'Technical', 'alice', CURRENT_TIMESTAMP),
+    ('Login issues with portal', 'in_progress', 'medium', 'Technical', 'bob', CURRENT_TIMESTAMP),
+    ('Invoice discrepancy', 'resolved', 'low', 'Billing', 'charlie', CURRENT_TIMESTAMP);
 
--- Sample messages
-INSERT INTO messages (ticket_id, message_text, author, created_at)
+-- Sample messages for tickets
+INSERT INTO ticket_messages (ticket_id, description, author, created_at)
 VALUES 
-    (1, 'Tried restarting it, still no luck', 'alice', CURRENT_TIMESTAMP()),
-    (1, 'Can you check if it has paper and toner?', 'support', CURRENT_TIMESTAMP()),
-    (2, 'I will send you a password reset link', 'support', CURRENT_TIMESTAMP()),
-    (3, 'Software installed successfully', 'support', CURRENT_TIMESTAMP()),
-    (3, 'Thanks for the quick help!', 'carol', CURRENT_TIMESTAMP());
+    (1, 'Tried restarting it, still no luck', 'alice', CURRENT_TIMESTAMP),
+    (1, 'Have you checked the paper tray and ink levels?', 'support_team', CURRENT_TIMESTAMP),
+    (2, 'Getting error "Invalid credentials" when trying to log in', 'bob', CURRENT_TIMESTAMP),
+    (3, 'Invoice #12345 shows incorrect amount', 'charlie', CURRENT_TIMESTAMP),
+    (3, 'Investigated and corrected. Refund processed.', 'billing_team', CURRENT_TIMESTAMP);
