@@ -6,7 +6,7 @@ VALUES
     ('Invoice discrepancy', 'resolved', 'low', 'Billing', 'charlie', CURRENT_TIMESTAMP);
 
 -- Sample messages for tickets
-INSERT INTO ticket_messages (ticket_id, description, author, created_at)
+INSERT INTO ticket_messages (ticket_id, message_text, author, created_at)
 VALUES 
     (1, 'Tried restarting it, still no luck', 'alice', CURRENT_TIMESTAMP),
     (1, 'Have you checked the paper tray and ink levels?', 'support_team', CURRENT_TIMESTAMP),

@@ -11,19 +11,19 @@ let currentFilters = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     loadTickets();
+    loadStats();
 });
 
 // Event listeners
 function initializeEventListeners() {
     // New ticket modal
-    document.getElementById('newTicketBtn').addEventListener('click', openNewTicketModal);
-    document.querySelector('.modal .close-btn').addEventListener('click', closeNewTicketModal);
-    document.getElementById('cancelBtn').addEventListener('click', closeNewTicketModal);
-    document.getElementById('newTicketForm').addEventListener('submit', handleCreateTicket);
+    document.getElementById('btn-new-ticket').addEventListener('click', openNewTicketModal);
+    document.getElementById('btn-cancel').addEventListener('click', closeNewTicketModal);
+    document.getElementById('new-ticket-form').addEventListener('submit', handleCreateTicket);
 
     // Close modal on outside click
-    document.getElementById('newTicketModal').addEventListener('click', (e) => {
-        if (e.target.id === 'newTicketModal') {
+    document.getElementById('modal-backdrop').addEventListener('click', (e) => {
+        if (e.target.id === 'modal-backdrop') {
             closeNewTicketModal();
         }
     });
@@ -32,8 +32,9 @@ function initializeEventListeners() {
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', handleStatusFilter);
     });
-    document.getElementById('priorityFilter').addEventListener('change', handlePriorityFilter);
-    document.getElementById('sortOrder').addEventListener('change', handleSortChange);
+    // Priority filter and sort are not in the current HTML, so commenting out
+    // document.getElementById('priorityFilter').addEventListener('change', handlePriorityFilter);
+    // document.getElementById('sortOrder').addEventListener('change', handleSortChange);
 }
 
 // API calls
@@ -49,6 +50,7 @@ async function loadTickets() {
         tickets = await response.json();
         applyFiltersAndSort();
         renderTicketList();
+        loadStats();
     } catch (error) {
         showError('Failed to load tickets. Please refresh the page.');
         console.error('Error loading tickets:', error);
@@ -103,7 +105,7 @@ async function updateTicketStatus(ticketId, status) {
 
 async function loadTicketDetail(ticketId) {
     try {
-        const ticket = tickets.find(t => t.id === ticketId);
+        const ticket = tickets.find(t => t.ticket_id === ticketId);
         if (!ticket) {
             throw new Error('Ticket not found');
         }
@@ -159,7 +161,7 @@ async function deleteTicket(ticketId) {
         
         if (selectedTicketId === ticketId) {
             selectedTicketId = null;
-            document.getElementById('ticketDetail').innerHTML = '<div class="empty-state"><p>Select a ticket to view details</p></div>';
+            document.getElementById('detail').innerHTML = '<div class="empty-state"><p>Select a ticket to view details</p></div>';
         }
         await loadTickets();
     } catch (error) {
@@ -212,7 +214,7 @@ function handleSortChange(e) {
 
 // Rendering functions
 function renderTicketList() {
-    const listContainer = document.getElementById('ticketList');
+    const listContainer = document.getElementById('ticket-list');
     
     if (tickets.length === 0) {
         listContainer.innerHTML = '<div class="empty-state"><p>No tickets found</p></div>';
@@ -240,7 +242,7 @@ function createTicketCard(ticket) {
     const priorityIcon = getPriorityIcon(ticket.priority);
     
     return `
-        <div class="ticket-card ${selectedTicketId === ticket.id ? 'active' : ''}" data-ticket-id="${ticket.id}">
+        <div class="ticket-card ${selectedTicketId === ticket.ticket_id ? 'active' : ''}" data-ticket-id="${ticket.ticket_id}">
             <div class="ticket-card-header">
                 <h3>${escapeHtml(ticket.title)}</h3>
                 <span class="status-badge ${statusClass}">${formatStatus(ticket.status)}</span>
@@ -254,7 +256,7 @@ function createTicketCard(ticket) {
 }
 
 function renderTicketDetail(ticket, messages) {
-    const detailContainer = document.getElementById('ticketDetail');
+    const detailContainer = document.getElementById('detail');
     const createdDate = formatDate(ticket.created_at);
     
     detailContainer.innerHTML = `
@@ -268,13 +270,13 @@ function renderTicketDetail(ticket, messages) {
                     ${ticket.category ? `<span>•</span><span>${escapeHtml(ticket.category)}</span>` : ''}
                 </div>
             </div>
-            <button class="btn btn-danger" onclick="deleteTicket(${ticket.id})">Delete</button>
+            <button class="btn btn-danger" onclick="deleteTicket(${ticket.ticket_id})">Delete</button>
         </div>
         
         <div class="ticket-detail-info">
             <div class="info-item">
                 <label>Status:</label>
-                <select class="status-select" onchange="updateTicketStatus(${ticket.id}, this.value)">
+                <select class="status-select" onchange="updateTicketStatus(${ticket.ticket_id}, this.value)">
                     <option value="open" ${ticket.status === 'open' ? 'selected' : ''}>Open</option>
                     <option value="in_progress" ${ticket.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
                     <option value="resolved" ${ticket.status === 'resolved' ? 'selected' : ''}>Resolved</option>
@@ -295,7 +297,7 @@ function renderTicketDetail(ticket, messages) {
             <div class="message-input">
                 <input type="text" id="messageText" placeholder="Type your message..." />
                 <input type="text" id="messageAuthor" placeholder="Your name" />
-                <button class="btn btn-primary" onclick="handleAddMessage(${ticket.id})">Send</button>
+                <button class="btn btn-primary" onclick="handleAddMessage(${ticket.ticket_id})">Send</button>
             </div>
         </div>
     `;
@@ -316,12 +318,12 @@ function createMessageItem(message) {
 
 // Event handlers
 function openNewTicketModal() {
-    document.getElementById('newTicketModal').style.display = 'flex';
-    document.getElementById('newTicketForm').reset();
+    document.getElementById('modal-backdrop').style.display = 'flex';
+    document.getElementById('new-ticket-form').reset();
 }
 
 function closeNewTicketModal() {
-    document.getElementById('newTicketModal').style.display = 'none';
+    document.getElementById('modal-backdrop').style.display = 'none';
 }
 
 async function handleCreateTicket(e) {
@@ -350,6 +352,24 @@ async function handleAddMessage(ticketId) {
     await addMessage(ticketId, messageText, author);
     document.getElementById('messageText').value = '';
     document.getElementById('messageAuthor').value = '';
+}
+
+// Stats
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) {
+            throw new Error('Failed to load stats');
+        }
+        const data = await response.json();
+        
+        document.getElementById('stat-total').textContent = data.total || 0;
+        document.getElementById('stat-open').textContent = data.by_status.open || 0;
+        document.getElementById('stat-in_progress').textContent = data.by_status.in_progress || 0;
+        document.getElementById('stat-resolved').textContent = data.by_status.resolved || 0;
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
 }
 
 // Utility functions
@@ -418,11 +438,11 @@ function formatDate(dateString) {
 }
 
 function showError(message) {
-    const toast = document.getElementById('errorToast');
-    toast.textContent = message;
-    toast.classList.add('show');
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 5000);
+    const errorDiv = document.getElementById('form-error');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+    } else {
+        console.error(message);
+        alert(message);
+    }
 }
