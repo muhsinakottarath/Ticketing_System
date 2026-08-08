@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support Ticket System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Support Ticket System</h1>
+            <button id="newTicketBtn" class="btn btn-primary">+ New Ticket</button>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Panel: Ticket List -->
+            <div class="left-panel">
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <div class="status-filters">
+                            <button class="filter-btn active" data-status="all">All</button>
+                            <button class="filter-btn" data-status="open">Open</button>
+                            <button class="filter-btn" data-status="in_progress">In Progress</button>
+                            <button class="filter-btn" data-status="resolved">Resolved</button>
+                        </div>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Priority:</label>
+                        <select id="priorityFilter">
+                            <option value="all">All</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label>Sort:</label>
+                        <select id="sortOrder">
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="ticketList" class="ticket-list">
+                    <div class="loading">Loading tickets...</div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Ticket Detail -->
+            <div class="right-panel">
+                <div id="ticketDetail" class="ticket-detail">
+                    <div class="empty-state">
+                        <p>Select a ticket to view details</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Ticket Modal -->
+    <div id="newTicketModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Ticket</h2>
+                <button class="close-btn">&times;</button>
+            </div>
+            <form id="newTicketForm">
+                <div class="form-group">
+                    <label for="ticketTitle">Title *</label>
+                    <input type="text" id="ticketTitle" name="title" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="ticketCreatedBy">Created By *</label>
+                    <input type="text" id="ticketCreatedBy" name="created_by" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="ticketPriority">Priority *</label>
+                    <select id="ticketPriority" name="priority" required>
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="ticketCategory">Category</label>
+                    <input type="text" id="ticketCategory" name="category" placeholder="e.g., Technical, Billing, General">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Ticket</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Error Toast -->
+    <div id="errorToast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
