@@ -37,8 +37,9 @@ def get_conn():
 
 def ensure_schema():
     """Create tables if they don't exist yet, and seed sample data once."""
-    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
-    seed_path = os.path.join(os.path.dirname(__file__), "seed_data.sql")
+    base_dir = os.getcwd()
+    schema_path = os.path.join(base_dir, "schema.sql")
+    seed_path = os.path.join(base_dir, "seed_data.sql")
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -240,10 +241,12 @@ def stats():
 
 
 if __name__ == "__main__":
-    ensure_schema()
+    if DATABASE_URL:
+        ensure_schema()
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
 else:
     # Databricks Apps typically imports the module rather than running __main__,
     # so make sure the schema/seed step still runs on startup.
-    ensure_schema()
+    if DATABASE_URL:
+        ensure_schema()
