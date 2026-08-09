@@ -5,7 +5,13 @@ resources:
     secret:
       scope: support_app_secrets
       key: DATABASE_URL
+  - name: MASSIVE_API_KEY
+    secret:
+      scope: support_app_secrets
+      key: MASSIVE_API_KEY
 
 env:
   - name: DATABASE_URL
     valueFrom: ${resources.DATABASE_URL}
+  - name: MASSIVE_API_KEY
+    valueFrom: ${resources.MASSIVE_API_KEY}

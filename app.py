@@ -22,6 +22,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
+MASSIVE_API_KEY = os.environ.get("MASSIVE_API_KEY")
 
 VALID_STATUSES = {"open", "in_progress", "resolved"}
 VALID_PRIORITIES = {"low", "medium", "high"}
